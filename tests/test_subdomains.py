@@ -90,6 +90,18 @@ def test_subdomain_edges_preserved():
     print(f"Faces inside subdomain: {faces_inside}")
     assert faces_inside > 0, "Subdomain should be triangulated, not a hole!"
 
+
+def test_overlapping_subdomains_raise_value_error():
+    exterior = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+    sub1 = Polygon([(2, 2), (6, 2), (6, 6), (2, 6)])
+    sub2 = Polygon([(5, 5), (8, 5), (8, 8), (5, 8)])  # overlaps sub1
+
+    with pytest.raises(
+        ValueError,
+        match="Subdomains must be pairwise disjoint",
+    ):
+        triangulate_polygon(exterior, subdomains=[sub1, sub2])
+
 if __name__ == "__main__":
     test_subdomain_edges_preserved()
     print("Test passed!")

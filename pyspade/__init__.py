@@ -32,7 +32,7 @@ def _all_disjoint(polygons):
 
 def triangulate_polygon(
     polygon: Polygon,
-    subdomains: List[Polygon] = None,
+    subdomains: Optional[List[Polygon]] = None,
     max_area: float | None = None,
     min_angle: float | None = None,
     return_shapely: bool = False,
@@ -91,15 +91,16 @@ def triangulate_polygon(
                 )
         if not _all_disjoint(subdomains):
             raise ValueError(
-                "The polygon and subdomains must be disjoint (they can touch at the boundary but not overlap)."
+                "Subdomains must be pairwise disjoint (they can touch at the boundary but not overlap)."
             )
         for subdomain in subdomains:
             # Check that subdomain is within the main polygon
             if not polygon.contains(subdomain):
                 raise ValueError(
-                    "Each subdomain polygon must be fully contained within the main polygon."
+                    "Each subdomain polygon must be strictly contained within the main polygon interior "
+                    "(not outside, and not touching the exterior boundary or any hole boundary)."
                 )
-        
+         
         subdomain_coords = [list(sub.exterior.coords)[:-1] for sub in subdomains]
 
     verts, faces = triangulate(exterior, holes if holes else None, subdomain_coords, max_area, min_angle)

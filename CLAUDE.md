@@ -46,20 +46,27 @@ uv run python visualize/plot_triangulation.py
 
 **Handling Non-Convex Polygons & Holes:**
 - Uses spade's `ConstrainedDelaunayTriangulation` (CDT) with constraint edges
-- Exterior boundary and holes both added as closed constraint edge loops
-- Calls `cdt.refine()` with `exclude_outer_faces(true)` to classify faces via flood-fill
-- Faces reachable from outer face without crossing constraint edges are excluded
-- This automatically excludes both exterior faces and faces inside holes
+- Exterior boundary, holes, and subdomains all added as closed constraint edge loops
+- Face classification uses a **hybrid approach** depending on subdomain presence
+
+**Hybrid Face Classification Strategy:**
+- **Without subdomains** (fast path):
+  - Calls `cdt.refine()` with `exclude_outer_faces(true)` to classify faces via flood-fill
+  - Extracts `excluded_faces` from `RefinementResult` (O(f + e) complexity)
+  - Filters faces using simple HashSet lookup (~50x faster than manual filtering)
+  - Automatically excludes exterior faces and faces inside holes
+
+- **With subdomains** (compatibility path):
+  - Calls `cdt.refine()` with `exclude_outer_faces(false)` to avoid misclassifying subdomains
+  - Uses manual point-in-polygon ray casting to filter faces (O(f * (n + h*m)) complexity)
+  - Checks: face centroid must be inside exterior AND not inside any hole
+  - Subdomains are NOT checked - they only create constraint edges without excluding faces
+  - Required because spade's flood-fill can't distinguish subdomains (internal boundaries) from holes (exclusion boundaries)
 
 **Refinement Parameters:**
 - Default `angle_limit` is 30° in spade - we set it to 0° to disable by default
-- Only apply user-specified `max_area` and `min_angle` when provided
-- Always call `refine()` even without user params to get face classification
-
-**Face Filtering:**
-- Extract `excluded_faces` from `RefinementResult`
-- Filter out faces in the excluded set when building output
-- Creates vertex index mapping (spade handles → sequential 0,1,2... indices)
+- Apply user-specified `max_area` and `min_angle` when provided
+- Refinement improves mesh quality while preserving all constraint edges
 
 ## File Structure
 

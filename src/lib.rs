@@ -7,6 +7,8 @@ use spade::{
     AngleLimit, ConstrainedDelaunayTriangulation, Point2, RefinementParameters, Triangulation,
 };
 
+/// Point-in-polygon test using ray casting algorithm.
+/// Only used when subdomains are present (spade's face classification can't handle them).
 fn is_point_in_polygon(point: Point2<f64>, polygon: &[Point2<f64>]) -> bool {
     let mut inside = false;
     let n = polygon.len();
@@ -59,6 +61,7 @@ fn triangulate<'py>(
         .collect();
 
     // Add constraint edges for exterior boundary
+    // Clone exterior_points because we may need it later for manual face filtering
     cdt.add_constraint_edges(exterior_points.clone(), true)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{:?}", e)))?;
 
@@ -76,7 +79,7 @@ fn triangulate<'py>(
     }
 
     // Add constraint edges for each subdomain
-    if let Some(subdomain_list) = subdomains {
+    if let Some(ref subdomain_list) = subdomains {
         for subdomain_vertices in subdomain_list {
             let subdomain_points: Vec<Point2<f64>> = subdomain_vertices
                 .iter()
@@ -88,12 +91,15 @@ fn triangulate<'py>(
         }
     }
 
-    // Always call refine with exclude_outer_faces to get face classification
-    // This uses spade's internal flood-fill to identify outer faces
-    // Default angle_limit is 30 degrees - set to 0 to disable refinement when not requested
+    // Face classification strategy depends on whether subdomains are present:
+    // - NO subdomains: Use spade's exclude_outer_faces (fast, topologically correct)
+    // - WITH subdomains: Cannot use spade's classification (it can't distinguish subdomains from holes)
+    //   Instead, use manual point-in-polygon filtering later
+    let has_subdomains = subdomains.is_some();
+
     let mut params = RefinementParameters::<f64>::new()
-        .exclude_outer_faces(false)
-        .with_angle_limit(AngleLimit::from_deg(0.0)); // Disable angle-based refinement by default
+        .exclude_outer_faces(!has_subdomains)  // Only enable if no subdomains
+        .with_angle_limit(AngleLimit::from_deg(0.0));
 
     if let Some(area) = max_area {
         params = params.with_max_allowed_area(area);
@@ -103,7 +109,18 @@ fn triangulate<'py>(
         params = params.with_angle_limit(AngleLimit::from_deg(angle));
     }
 
-    cdt.refine(params);
+    // Refine the mesh (with or without face classification)
+    let result = if has_subdomains || max_area.is_some() || min_angle.is_some() {
+        cdt.refine(params)
+    } else {
+        cdt.refine(params)  // Always refine for face classification when no subdomains
+    };
+
+    let excluded_faces = if !has_subdomains {
+        result.excluded_faces
+    } else {
+        Vec::new()  // Will use manual filtering instead
+    };
 
     // Build vertex index mapping (handle -> sequential index)
     let mut vertex_map: HashMap<_, usize> = HashMap::new();
@@ -116,47 +133,65 @@ fn triangulate<'py>(
         out_vertices.push([pos.x, pos.y]);
     }
 
-    // Prepare hole polygons for checking
-    let mut hole_polygons: Vec<Vec<Point2<f64>>> = Vec::new();
-    if let Some(hole_list) = &holes {
-        for hole_vertices in hole_list {
-            hole_polygons.push(
-                hole_vertices
-                    .iter()
-                    .map(|(x, y)| Point2::new(*x, *y))
-                    .collect(),
-            );
-        }
-    }
-
-    // Extract only interior faces
+    // Extract only interior faces - strategy depends on whether subdomains are present
     let mut out_faces: Vec<[u32; 3]> = Vec::new();
 
-    for face in cdt.inner_faces() {
-        let center = face.center();
-
-        // Check 1: Must be inside exterior
-        if !is_point_in_polygon(center, &exterior_points) {
-            continue;
+    if !has_subdomains {
+        // Fast path: Use spade's face classification (no subdomains)
+        let excluded_set: HashSet<_> = excluded_faces.iter().cloned().collect();
+        for face in cdt.inner_faces() {
+            if excluded_set.contains(&face.fix()) {
+                continue;
+            }
+            let face_vertices = face.vertices();
+            let i0 = vertex_map[&face_vertices[0].fix()] as u32;
+            let i1 = vertex_map[&face_vertices[1].fix()] as u32;
+            let i2 = vertex_map[&face_vertices[2].fix()] as u32;
+            out_faces.push([i0, i1, i2]);
         }
-
-        // Check 2: Must NOT be inside any hole
-        let mut in_hole = false;
-        for hole in &hole_polygons {
-            if is_point_in_polygon(center, hole) {
-                in_hole = true;
-                break;
+    } else {
+        // Slow path: Manual point-in-polygon filtering (subdomains present)
+        // Prepare hole polygons for checking
+        let mut hole_polygons: Vec<Vec<Point2<f64>>> = Vec::new();
+        if let Some(hole_list) = &holes {
+            for hole_vertices in hole_list {
+                hole_polygons.push(
+                    hole_vertices
+                        .iter()
+                        .map(|(x, y)| Point2::new(*x, *y))
+                        .collect(),
+                );
             }
         }
-        if in_hole {
-            continue;
-        }
 
-        let face_vertices = face.vertices();
-        let i0 = vertex_map[&face_vertices[0].fix()] as u32;
-        let i1 = vertex_map[&face_vertices[1].fix()] as u32;
-        let i2 = vertex_map[&face_vertices[2].fix()] as u32;
-        out_faces.push([i0, i1, i2]);
+        // Filter faces: must be inside exterior AND not inside any hole
+        // Note: Subdomains are NOT checked - they only create constraint edges
+        for face in cdt.inner_faces() {
+            let center = face.center();
+
+            // Check 1: Must be inside exterior
+            if !is_point_in_polygon(center, &exterior_points) {
+                continue;
+            }
+
+            // Check 2: Must NOT be inside any hole
+            let mut in_hole = false;
+            for hole in &hole_polygons {
+                if is_point_in_polygon(center, hole) {
+                    in_hole = true;
+                    break;
+                }
+            }
+            if in_hole {
+                continue;
+            }
+
+            let face_vertices = face.vertices();
+            let i0 = vertex_map[&face_vertices[0].fix()] as u32;
+            let i1 = vertex_map[&face_vertices[1].fix()] as u32;
+            let i2 = vertex_map[&face_vertices[2].fix()] as u32;
+            out_faces.push([i0, i1, i2]);
+        }
     }
 
     // Convert to numpy arrays
