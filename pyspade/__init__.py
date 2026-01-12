@@ -19,11 +19,12 @@ def _all_disjoint(polygons):
     """
     tree = STRtree(polygons)
 
-    for poly in polygons:
+    for i, poly in enumerate(polygons):
         # Only check likely candidates via bounding boxes
-        for other in tree.query(poly):
-            if other is poly:
+        for idx in tree.query(poly):
+            if idx == i:
                 continue
+            other = polygons[idx]
             # Overlap = interiors intersect (not just touching)
             if poly.intersects(other) and not poly.touches(other):
                 return False
@@ -80,6 +81,7 @@ def triangulate_polygon(
     # Get hole coordinates
     holes = [list(interior.coords)[:-1] for interior in polygon.interiors]
 
+    subdomain_coords = None
     if subdomains:
         for idx,subdomain in enumerate(subdomains):
             if not subdomain.is_valid:
@@ -97,12 +99,24 @@ def triangulate_polygon(
                 raise ValueError(
                     "Each subdomain polygon must be fully contained within the main polygon."
                 )
+        
+        subdomain_coords = [list(sub.exterior.coords)[:-1] for sub in subdomains]
 
-    else:
-        subdomains = []
+    verts, faces = triangulate(exterior, holes if holes else None, subdomain_coords, max_area, min_angle)
 
+    # Filter unused vertices
+    unique_indices = np.unique(faces)
+    if len(unique_indices) < len(verts):
+        # Create a mapping from old index to new index
+        new_indices = np.full(len(verts), -1, dtype=int)
+        new_indices[unique_indices] = np.arange(len(unique_indices))
+        
+        # Update faces
+        faces = new_indices[faces]
+        
+        # Update vertices
+        verts = verts[unique_indices]
 
-    verts, faces = triangulate(exterior, holes if holes else None, max_area, min_angle)
     if return_shapely:
         multipolygon = mesh_to_multipolygon(verts, faces)
         return multipolygon

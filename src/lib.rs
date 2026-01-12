@@ -7,6 +7,26 @@ use spade::{
     AngleLimit, ConstrainedDelaunayTriangulation, Point2, RefinementParameters, Triangulation,
 };
 
+fn is_point_in_polygon(point: Point2<f64>, polygon: &[Point2<f64>]) -> bool {
+    let mut inside = false;
+    let n = polygon.len();
+    let x = point.x;
+    let y = point.y;
+
+    for i in 0..n {
+        let j = (i + 1) % n;
+        let p1 = polygon[i];
+        let p2 = polygon[j];
+
+        if ((p1.y > y) != (p2.y > y))
+            && (x < (p2.x - p1.x) * (y - p1.y) / (p2.y - p1.y) + p1.x)
+        {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
 /// Triangulate a polygon defined by its boundary vertices.
 ///
 /// # Arguments
@@ -20,11 +40,12 @@ use spade::{
 /// * vertices is an Nx2 array of float64 coordinates
 /// * faces is an Mx3 array of uint32 vertex indices
 #[pyfunction]
-#[pyo3(signature = (vertices, holes=None, max_area=None, min_angle=None))]
+#[pyo3(signature = (vertices, holes=None, subdomains=None, max_area=None, min_angle=None))]
 fn triangulate<'py>(
     py: Python<'py>,
     vertices: Vec<(f64, f64)>,
     holes: Option<Vec<Vec<(f64, f64)>>>,
+    subdomains: Option<Vec<Vec<(f64, f64)>>>,
     max_area: Option<f64>,
     min_angle: Option<f64>,
 ) -> PyResult<(Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<u32>>)> {
@@ -38,11 +59,11 @@ fn triangulate<'py>(
         .collect();
 
     // Add constraint edges for exterior boundary
-    cdt.add_constraint_edges(exterior_points, true)
+    cdt.add_constraint_edges(exterior_points.clone(), true)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{:?}", e)))?;
 
     // Add constraint edges for each hole
-    if let Some(hole_list) = holes {
+    if let Some(hole_list) = &holes {
         for hole_vertices in hole_list {
             let hole_points: Vec<Point2<f64>> = hole_vertices
                 .iter()
@@ -54,11 +75,24 @@ fn triangulate<'py>(
         }
     }
 
+    // Add constraint edges for each subdomain
+    if let Some(subdomain_list) = subdomains {
+        for subdomain_vertices in subdomain_list {
+            let subdomain_points: Vec<Point2<f64>> = subdomain_vertices
+                .iter()
+                .map(|(x, y)| Point2::new(*x, *y))
+                .collect();
+
+            cdt.add_constraint_edges(subdomain_points, true)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{:?}", e)))?;
+        }
+    }
+
     // Always call refine with exclude_outer_faces to get face classification
     // This uses spade's internal flood-fill to identify outer faces
     // Default angle_limit is 30 degrees - set to 0 to disable refinement when not requested
     let mut params = RefinementParameters::<f64>::new()
-        .exclude_outer_faces(true)
+        .exclude_outer_faces(false)
         .with_angle_limit(AngleLimit::from_deg(0.0)); // Disable angle-based refinement by default
 
     if let Some(area) = max_area {
@@ -69,10 +103,7 @@ fn triangulate<'py>(
         params = params.with_angle_limit(AngleLimit::from_deg(angle));
     }
 
-    let refinement_result = cdt.refine(params);
-
-    // Collect excluded (outer) faces into a HashSet for fast lookup
-    let excluded_faces: HashSet<_> = refinement_result.excluded_faces.iter().collect();
+    cdt.refine(params);
 
     // Build vertex index mapping (handle -> sequential index)
     let mut vertex_map: HashMap<_, usize> = HashMap::new();
@@ -85,12 +116,39 @@ fn triangulate<'py>(
         out_vertices.push([pos.x, pos.y]);
     }
 
-    // Extract only interior faces (not in excluded_faces set)
+    // Prepare hole polygons for checking
+    let mut hole_polygons: Vec<Vec<Point2<f64>>> = Vec::new();
+    if let Some(hole_list) = &holes {
+        for hole_vertices in hole_list {
+            hole_polygons.push(
+                hole_vertices
+                    .iter()
+                    .map(|(x, y)| Point2::new(*x, *y))
+                    .collect(),
+            );
+        }
+    }
+
+    // Extract only interior faces
     let mut out_faces: Vec<[u32; 3]> = Vec::new();
 
     for face in cdt.inner_faces() {
-        // Skip faces that are outside the polygon (in excluded set)
-        if excluded_faces.contains(&face.fix()) {
+        let center = face.center();
+
+        // Check 1: Must be inside exterior
+        if !is_point_in_polygon(center, &exterior_points) {
+            continue;
+        }
+
+        // Check 2: Must NOT be inside any hole
+        let mut in_hole = false;
+        for hole in &hole_polygons {
+            if is_point_in_polygon(center, hole) {
+                in_hole = true;
+                break;
+            }
+        }
+        if in_hole {
             continue;
         }
 
