@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ndarray::Array2;
 use numpy::{IntoPyArray, PyArray2};
@@ -6,25 +6,6 @@ use pyo3::prelude::*;
 use spade::{
     AngleLimit, ConstrainedDelaunayTriangulation, Point2, RefinementParameters, Triangulation,
 };
-
-/// Check if a point is inside a polygon using ray casting algorithm
-fn point_in_polygon(point: (f64, f64), polygon: &[(f64, f64)]) -> bool {
-    let (px, py) = point;
-    let n = polygon.len();
-    let mut inside = false;
-
-    let mut j = n - 1;
-    for i in 0..n {
-        let (xi, yi) = polygon[i];
-        let (xj, yj) = polygon[j];
-
-        if ((yi > py) != (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi) {
-            inside = !inside;
-        }
-        j = i;
-    }
-    inside
-}
 
 /// Triangulate a polygon defined by its boundary vertices.
 ///
@@ -58,20 +39,25 @@ fn triangulate<'py>(
     cdt.add_constraint_edges(points, true)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{:?}", e)))?;
 
-    // Apply mesh refinement if parameters are provided
-    if max_area.is_some() || min_angle.is_some() {
-        let mut params = RefinementParameters::<f64>::new().exclude_outer_faces(true);
+    // Always call refine with exclude_outer_faces to get face classification
+    // This uses spade's internal flood-fill to identify outer faces
+    // Default angle_limit is 30 degrees - set to 0 to disable refinement when not requested
+    let mut params = RefinementParameters::<f64>::new()
+        .exclude_outer_faces(true)
+        .with_angle_limit(AngleLimit::from_deg(0.0)); // Disable angle-based refinement by default
 
-        if let Some(area) = max_area {
-            params = params.with_max_allowed_area(area);
-        }
-
-        if let Some(angle) = min_angle {
-            params = params.with_angle_limit(AngleLimit::from_deg(angle));
-        }
-
-        cdt.refine(params);
+    if let Some(area) = max_area {
+        params = params.with_max_allowed_area(area);
     }
+
+    if let Some(angle) = min_angle {
+        params = params.with_angle_limit(AngleLimit::from_deg(angle));
+    }
+
+    let refinement_result = cdt.refine(params);
+
+    // Collect excluded (outer) faces into a HashSet for fast lookup
+    let excluded_faces: HashSet<_> = refinement_result.excluded_faces.iter().collect();
 
     // Build vertex index mapping (handle -> sequential index)
     let mut vertex_map: HashMap<_, usize> = HashMap::new();
@@ -84,25 +70,20 @@ fn triangulate<'py>(
         out_vertices.push([pos.x, pos.y]);
     }
 
-    // Extract only interior faces (centroid must be inside the input polygon)
+    // Extract only interior faces (not in excluded_faces set)
     let mut out_faces: Vec<[u32; 3]> = Vec::new();
 
     for face in cdt.inner_faces() {
-        let face_vertices = face.vertices();
-        let p0 = face_vertices[0].position();
-        let p1 = face_vertices[1].position();
-        let p2 = face_vertices[2].position();
-
-        // Compute centroid of the triangle
-        let centroid = ((p0.x + p1.x + p2.x) / 3.0, (p0.y + p1.y + p2.y) / 3.0);
-
-        // Only include face if centroid is inside the input polygon
-        if point_in_polygon(centroid, &vertices) {
-            let i0 = vertex_map[&face_vertices[0].fix()] as u32;
-            let i1 = vertex_map[&face_vertices[1].fix()] as u32;
-            let i2 = vertex_map[&face_vertices[2].fix()] as u32;
-            out_faces.push([i0, i1, i2]);
+        // Skip faces that are outside the polygon (in excluded set)
+        if excluded_faces.contains(&face.fix()) {
+            continue;
         }
+
+        let face_vertices = face.vertices();
+        let i0 = vertex_map[&face_vertices[0].fix()] as u32;
+        let i1 = vertex_map[&face_vertices[1].fix()] as u32;
+        let i2 = vertex_map[&face_vertices[2].fix()] as u32;
+        out_faces.push([i0, i1, i2]);
     }
 
     // Convert to numpy arrays
