@@ -1,0 +1,18 @@
+[package]
+name = "pyspade"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "pyspade"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.27.2", features = ["extension-module"] }
+numpy = "0.27.1"
+ndarray = "0.17.2"
+spade = "2.15.0"
+
+[build-dependencies]
+maturin = "1.11.5"
+
