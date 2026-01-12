@@ -25,7 +25,7 @@ def plot_polygon_and_mesh(
         Minimum angle in degrees for mesh refinement.
     """
     # Triangulate the polygon
-    vertices, faces = triangulate_polygon(polygon, max_area, min_angle)
+    vertices, faces = triangulate_polygon(polygon, max_area= max_area, min_angle=min_angle)
 
     # Create figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))

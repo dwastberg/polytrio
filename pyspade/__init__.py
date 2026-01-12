@@ -4,18 +4,38 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from shapely import is_valid_reason
+from shapely.strtree import STRtree
+
 
 from pyspade._pyspade import triangulate
 
-if TYPE_CHECKING:
-    from shapely import Polygon
+from typing import TYPE_CHECKING, Optional, List, Union
 
+from shapely.geometry import Polygon, MultiPolygon, LineString
+def _all_disjoint(polygons):
+    """
+    Returns True if all polygons are disjoint (touching is allowed),
+    and False as soon as any overlapping pair is found.
+    """
+    tree = STRtree(polygons)
+
+    for poly in polygons:
+        # Only check likely candidates via bounding boxes
+        for other in tree.query(poly):
+            if other is poly:
+                continue
+            # Overlap = interiors intersect (not just touching)
+            if poly.intersects(other) and not poly.touches(other):
+                return False
+    return True
 
 def triangulate_polygon(
     polygon: Polygon,
+    subdomains: List[Polygon] = None,
     max_area: float | None = None,
     min_angle: float | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
+    return_shapely: bool = False,
+    ) -> Union[tuple[np.ndarray, np.ndarray], MultiPolygon]:
     """Triangulate a shapely polygon into a mesh.
 
     Supports polygons with holes. Holes are automatically excluded from the mesh.
@@ -24,18 +44,23 @@ def triangulate_polygon(
     ----------
     polygon : shapely.Polygon
         The polygon to triangulate. Must be valid (no self-intersections).
+    subdomains : list of internal subdomains, optional
     max_area : float, optional
         Maximum triangle area for mesh refinement.
     min_angle : float, optional
         Minimum angle in degrees for mesh refinement.
+    return_shapely : bool, optional
+        If True, return a shapely MultiPolygon representing the mesh instead of raw arrays.
 
     Returns
     -------
-    vertices : np.ndarray
-        Nx2 array of vertex coordinates (float64).
+    verts : np.ndarray
+        Nx2 array of vertex coordinates.
     faces : np.ndarray
-        Mx3 array of triangle vertex indices (uint32).
-
+        Mx3 array of triangle vertex indices.
+    or
+    multipolygon : shapely.MultiPolygon
+        The resulting MultiPolygon representing the mesh.
     Raises
     ------
     ValueError
@@ -55,7 +80,60 @@ def triangulate_polygon(
     # Get hole coordinates
     holes = [list(interior.coords)[:-1] for interior in polygon.interiors]
 
-    return triangulate(exterior, holes if holes else None, max_area, min_angle)
+    if subdomains:
+        for idx,subdomain in enumerate(subdomains):
+            if not subdomain.is_valid:
+                reason = is_valid_reason(subdomain)
+                raise ValueError(
+                    f"subdomain polygon {idx} is invalid: {reason}. "
+                )
+        if not _all_disjoint(subdomains):
+            raise ValueError(
+                "The polygon and subdomains must be disjoint (they can touch at the boundary but not overlap)."
+            )
+        for subdomain in subdomains:
+            # Check that subdomain is within the main polygon
+            if not polygon.contains(subdomain):
+                raise ValueError(
+                    "Each subdomain polygon must be fully contained within the main polygon."
+                )
+
+    else:
+        subdomains = []
+
+
+    verts, faces = triangulate(exterior, holes if holes else None, max_area, min_angle)
+    if return_shapely:
+        multipolygon = mesh_to_multipolygon(verts, faces)
+        return multipolygon
+    return verts, faces
+
+def mesh_to_multipolygon(
+    vertices: np.ndarray,
+    faces: np.ndarray,
+) -> MultiPolygon:
+    """Convert mesh vertices and faces to a shapely MultiPolygon.
+
+    Parameters
+    ----------
+    vertices : np.ndarray
+        Nx2 array of vertex coordinates.
+    faces : np.ndarray
+        Mx3 array of triangle vertex indices.
+
+    Returns
+    -------
+    multipolygon : shapely.MultiPolygon
+        The resulting MultiPolygon representing the mesh.
+    """
+
+    polygons = []
+    for face in faces:
+        triangle_coords = vertices[face]
+        polygon = Polygon(triangle_coords)
+        polygons.append(polygon)
+
+    return MultiPolygon(polygons)
 
 
 __all__ = ["triangulate", "triangulate_polygon"]
