@@ -92,6 +92,21 @@ def main() -> None:
     star = Polygon(coords)
     plot_polygon_and_mesh(star, max_area=0.02, min_angle=20.0)
 
+    # Example 5: Polygon with hole
+    print("Example 5: Square with square hole")
+    exterior = [(0, 0), (10, 0), (10, 10), (0, 10)]
+    hole = [(3, 3), (7, 3), (7, 7), (3, 7)]
+    poly_with_hole = Polygon(exterior, holes=[hole])
+    plot_polygon_and_mesh(poly_with_hole, max_area=0.5)
+
+    # Example 6: Polygon with multiple holes
+    print("Example 6: Rectangle with two holes")
+    exterior = [(0, 0), (20, 0), (20, 10), (0, 10)]
+    hole1 = [(2, 2), (6, 2), (6, 8), (2, 8)]
+    hole2 = [(14, 2), (18, 2), (18, 8), (14, 8)]
+    poly_with_holes = Polygon(exterior, holes=[hole1, hole2])
+    plot_polygon_and_mesh(poly_with_holes, max_area=0.5, min_angle=20.0)
+
 
 if __name__ == "__main__":
     main()

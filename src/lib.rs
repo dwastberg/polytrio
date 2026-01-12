@@ -10,7 +10,8 @@ use spade::{
 /// Triangulate a polygon defined by its boundary vertices.
 ///
 /// # Arguments
-/// * `vertices` - List of (x, y) coordinates defining the polygon boundary
+/// * `vertices` - List of (x, y) coordinates defining the polygon exterior boundary
+/// * `holes` - Optional list of hole boundaries, each a list of (x, y) coordinates
 /// * `max_area` - Optional maximum triangle area for mesh refinement
 /// * `min_angle` - Optional minimum angle in degrees for mesh refinement
 ///
@@ -19,25 +20,39 @@ use spade::{
 /// * vertices is an Nx2 array of float64 coordinates
 /// * faces is an Mx3 array of uint32 vertex indices
 #[pyfunction]
-#[pyo3(signature = (vertices, max_area=None, min_angle=None))]
+#[pyo3(signature = (vertices, holes=None, max_area=None, min_angle=None))]
 fn triangulate<'py>(
     py: Python<'py>,
     vertices: Vec<(f64, f64)>,
+    holes: Option<Vec<Vec<(f64, f64)>>>,
     max_area: Option<f64>,
     min_angle: Option<f64>,
 ) -> PyResult<(Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<u32>>)> {
     // Create constrained Delaunay triangulation
     let mut cdt = ConstrainedDelaunayTriangulation::<Point2<f64>>::new();
 
-    // Convert to Point2 and add as constraint edges (closed polygon)
-    let points: Vec<Point2<f64>> = vertices
+    // Convert exterior to Point2 and add as constraint edges (closed polygon)
+    let exterior_points: Vec<Point2<f64>> = vertices
         .iter()
         .map(|(x, y)| Point2::new(*x, *y))
         .collect();
 
-    // Add constraint edges to form a closed polygon
-    cdt.add_constraint_edges(points, true)
+    // Add constraint edges for exterior boundary
+    cdt.add_constraint_edges(exterior_points, true)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{:?}", e)))?;
+
+    // Add constraint edges for each hole
+    if let Some(hole_list) = holes {
+        for hole_vertices in hole_list {
+            let hole_points: Vec<Point2<f64>> = hole_vertices
+                .iter()
+                .map(|(x, y)| Point2::new(*x, *y))
+                .collect();
+
+            cdt.add_constraint_edges(hole_points, true)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{:?}", e)))?;
+        }
+    }
 
     // Always call refine with exclude_outer_faces to get face classification
     // This uses spade's internal flood-fill to identify outer faces

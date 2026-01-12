@@ -162,3 +162,79 @@ class TestEdgeCases:
 
         assert verts.shape == (4, 2)
         assert faces.shape == (2, 3)
+
+
+class TestPolygonsWithHoles:
+    """Tests for polygons with holes."""
+
+    def test_square_with_square_hole(self):
+        """A square with a square hole."""
+        from shapely.geometry import Point
+
+        exterior = [(0, 0), (10, 0), (10, 10), (0, 10)]
+        hole = [(2, 2), (8, 2), (8, 8), (2, 8)]
+        poly = Polygon(exterior, holes=[hole])
+
+        verts, faces = triangulate_polygon(poly)
+
+        # Should have vertices from both exterior and hole (at least)
+        assert verts.shape[0] >= 8  # At least 4 exterior + 4 hole
+
+        # Verify no triangles have centroids inside the hole
+        hole_poly = Polygon(hole)
+        for face in faces:
+            centroid = verts[face].mean(axis=0)
+            centroid_point = Point(centroid[0], centroid[1])
+            assert not hole_poly.contains(centroid_point)
+
+    def test_polygon_with_multiple_holes(self):
+        """Polygon with multiple holes."""
+        from shapely.geometry import Point
+
+        exterior = [(0, 0), (20, 0), (20, 20), (0, 20)]
+        hole1 = [(2, 2), (8, 2), (8, 8), (2, 8)]
+        hole2 = [(12, 12), (18, 12), (18, 18), (12, 18)]
+        poly = Polygon(exterior, holes=[hole1, hole2])
+
+        verts, faces = triangulate_polygon(poly)
+
+        # Should have vertices from exterior and both holes
+        assert verts.shape[0] >= 12  # At least 4+4+4
+
+        # Verify no faces inside either hole
+        hole1_poly = Polygon(hole1)
+        hole2_poly = Polygon(hole2)
+        for face in faces:
+            centroid = verts[face].mean(axis=0)
+            centroid_point = Point(centroid[0], centroid[1])
+            assert not hole1_poly.contains(centroid_point)
+            assert not hole2_poly.contains(centroid_point)
+
+    def test_hole_with_refinement(self):
+        """Test that refinement works with holes."""
+        from shapely.geometry import Point
+
+        exterior = [(0, 0), (10, 0), (10, 10), (0, 10)]
+        hole = [(3, 3), (7, 3), (7, 7), (3, 7)]
+        poly = Polygon(exterior, holes=[hole])
+
+        verts, faces = triangulate_polygon(poly, max_area=0.5)
+
+        # Should have many more vertices due to refinement
+        assert verts.shape[0] > 8
+
+        # No faces should be inside the hole
+        hole_poly = Polygon(hole)
+        for face in faces:
+            centroid = verts[face].mean(axis=0)
+            centroid_point = Point(centroid[0], centroid[1])
+            assert not hole_poly.contains(centroid_point)
+
+    def test_invalid_polygon_raises_error(self):
+        """Test that invalid polygons raise ValueError."""
+        # Self-intersecting polygon (bowtie shape)
+        exterior = [(0, 0), (2, 2), (2, 0), (0, 2)]
+        poly = Polygon(exterior)
+
+        with pytest.raises(ValueError, match="Invalid polygon"):
+            triangulate_polygon(poly)
