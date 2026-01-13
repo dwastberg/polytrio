@@ -1,5 +1,77 @@
-/target
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
 
-.venv
-.idea
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ========================
+# Rust
+# ========================
+# Cargo build artifacts
+/target/
+
+# Rustfmt / Clippy
+.rustfmt.toml.bak
+
+# Cargo.lock (ignore for libraries, keep for binaries)
+Cargo.lock
+
+# ========================
+# Maturin / PyO3
+# ========================
+# Maturin build output
+/maturin/
+*.so
+*.pyd
+*.dll
+*.dylib
+
+# Python extension artifacts
+*.abi3.so
+
+# ========================
+# Editors / OS
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# ========================
+# Logs / temp
+# ========================
+*.log
+tmp/
+temp/
+
 
