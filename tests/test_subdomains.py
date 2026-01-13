@@ -102,6 +102,64 @@ def test_overlapping_subdomains_raise_value_error():
     ):
         triangulate_polygon(exterior, subdomains=[sub1, sub2])
 
+
+def test_subdomain_ids_returned():
+    """Test that subdomain IDs are correctly assigned to faces."""
+    exterior = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+    subdomain1 = Polygon([(1, 1), (4, 1), (4, 4), (1, 4)])
+    subdomain2 = Polygon([(6, 6), (9, 6), (9, 9), (6, 9)])
+
+    verts, faces, subdomain_ids = triangulate_polygon(
+        exterior,
+        subdomains=[subdomain1, subdomain2],
+        return_subdomain_ids=True,
+    )
+
+    # Check subdomain_ids array shape
+    assert len(subdomain_ids) == len(faces)
+    assert subdomain_ids.dtype == np.int32
+
+    # Check that some faces are in subdomain 0, some in 1, some in neither (-1)
+    unique_ids = set(subdomain_ids)
+    assert -1 in unique_ids  # Faces outside both subdomains
+    assert 0 in unique_ids   # Faces in subdomain 0
+    assert 1 in unique_ids   # Faces in subdomain 1
+
+    # Verify faces are correctly classified
+    for i, face in enumerate(faces):
+        pts = verts[face]
+        centroid = pts.mean(axis=0)
+        point = Point(centroid[0], centroid[1])
+
+        if subdomain1.contains(point):
+            assert subdomain_ids[i] == 0, f"Face {i} centroid in subdomain1 but ID is {subdomain_ids[i]}"
+        elif subdomain2.contains(point):
+            assert subdomain_ids[i] == 1, f"Face {i} centroid in subdomain2 but ID is {subdomain_ids[i]}"
+        # Note: boundary faces might be tricky, so allow some flexibility
+
+
+def test_subdomain_ids_not_returned_by_default():
+    """Test that subdomain IDs are not returned unless requested."""
+    exterior = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+    subdomain = Polygon([(2, 2), (8, 2), (8, 8), (2, 8)])
+
+    result = triangulate_polygon(exterior, subdomains=[subdomain])
+
+    # Should return only 2 arrays (verts, faces)
+    assert len(result) == 2
+    verts, faces = result
+
+
+def test_subdomain_ids_with_no_subdomains():
+    """Test that requesting subdomain IDs with no subdomains returns None."""
+    exterior = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+
+    result = triangulate_polygon(exterior, return_subdomain_ids=True)
+
+    # Should still return only 2 arrays if no subdomains present
+    assert len(result) == 2
+
+
 if __name__ == "__main__":
     test_subdomain_edges_preserved()
     print("Test passed!")

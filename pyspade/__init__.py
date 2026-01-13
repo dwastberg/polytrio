@@ -36,7 +36,8 @@ def triangulate_polygon(
     max_area: float | None = None,
     min_angle: float | None = None,
     return_shapely: bool = False,
-    ) -> Union[tuple[np.ndarray, np.ndarray], MultiPolygon]:
+    return_subdomain_ids: bool = False,
+    ) -> Union[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray, np.ndarray], MultiPolygon]:
     """Triangulate a shapely polygon into a mesh.
 
     Supports polygons with holes. Holes are automatically excluded from the mesh.
@@ -52,6 +53,8 @@ def triangulate_polygon(
         Minimum angle in degrees for mesh refinement.
     return_shapely : bool, optional
         If True, return a shapely MultiPolygon representing the mesh instead of raw arrays.
+    return_subdomain_ids : bool, optional
+        If True, return subdomain IDs for each face. Only applicable when subdomains are provided.
 
     Returns
     -------
@@ -59,6 +62,9 @@ def triangulate_polygon(
         Nx2 array of vertex coordinates.
     faces : np.ndarray
         Mx3 array of triangle vertex indices.
+    subdomain_ids : np.ndarray, optional
+        Mx1 array of int32 subdomain IDs (if return_subdomain_ids=True).
+        Each element is the 0-based index of the subdomain containing that face, or -1 if not in any subdomain.
     or
     multipolygon : shapely.MultiPolygon
         The resulting MultiPolygon representing the mesh.
@@ -103,7 +109,14 @@ def triangulate_polygon(
          
         subdomain_coords = [list(sub.exterior.coords)[:-1] for sub in subdomains]
 
-    verts, faces = triangulate(exterior, holes if holes else None, subdomain_coords, max_area, min_angle)
+    verts, faces, subdomain_ids = triangulate(
+        exterior,
+        holes if holes else None,
+        subdomain_coords,
+        max_area,
+        min_angle,
+        return_subdomain_ids,
+    )
 
     # Filter unused vertices
     unique_indices = np.unique(faces)
@@ -111,17 +124,22 @@ def triangulate_polygon(
         # Create a mapping from old index to new index
         new_indices = np.full(len(verts), -1, dtype=int)
         new_indices[unique_indices] = np.arange(len(unique_indices))
-        
+
         # Update faces
         faces = new_indices[faces]
-        
+
         # Update vertices
         verts = verts[unique_indices]
 
     if return_shapely:
         multipolygon = mesh_to_multipolygon(verts, faces)
         return multipolygon
-    return verts, faces
+
+    # Return with or without subdomain_ids
+    if return_subdomain_ids and subdomain_ids is not None:
+        return verts, faces, subdomain_ids
+    else:
+        return verts, faces
 
 def mesh_to_multipolygon(
     vertices: np.ndarray,

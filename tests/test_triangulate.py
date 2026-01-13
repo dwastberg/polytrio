@@ -110,17 +110,19 @@ class TestTriangulateDirect:
     def test_direct_coordinates(self):
         """Test triangulate with raw coordinate list."""
         coords = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
-        verts, faces = triangulate(coords)
+        verts, faces, subdomain_ids = triangulate(coords)
 
         assert verts.shape == (4, 2)
         assert faces.shape == (2, 3)
+        assert subdomain_ids is None  # No subdomains, no IDs requested
 
     def test_direct_with_refinement(self):
         """Test triangulate with refinement parameters."""
         coords = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
-        verts, faces = triangulate(coords, max_area=0.1)
+        verts, faces, subdomain_ids = triangulate(coords, max_area=0.1)
 
         assert faces.shape[0] > 2
+        assert subdomain_ids is None  # No subdomains, no IDs requested
 
 
 class TestEdgeCases:
