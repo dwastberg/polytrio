@@ -108,9 +108,9 @@ class TestTriangulateDirect:
     """Tests for the low-level triangulate function."""
 
     def test_direct_coordinates(self):
-        """Test triangulate with raw coordinate list."""
-        coords = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
-        verts, faces, subdomain_ids = triangulate(coords)
+        """Test triangulate with Shapely polygon."""
+        polygon = Polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+        verts, faces, subdomain_ids = triangulate(polygon, None, None, None, False)
 
         assert verts.shape == (4, 2)
         assert faces.shape == (2, 3)
@@ -118,8 +118,8 @@ class TestTriangulateDirect:
 
     def test_direct_with_refinement(self):
         """Test triangulate with refinement parameters."""
-        coords = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
-        verts, faces, subdomain_ids = triangulate(coords, max_area=0.1)
+        polygon = Polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+        verts, faces, subdomain_ids = triangulate(polygon, None, 0.1, None, False)
 
         assert faces.shape[0] > 2
         assert subdomain_ids is None  # No subdomains, no IDs requested

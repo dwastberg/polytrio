@@ -81,15 +81,9 @@ def triangulate_polygon(
             "Polygon must not have self-intersections, holes touching the exterior, etc."
         )
 
-    # Get exterior coordinates (remove closing duplicate vertex)
-    exterior = list(polygon.exterior.coords)[:-1]
-
-    # Get hole coordinates
-    holes = [list(interior.coords)[:-1] for interior in polygon.interiors]
-
-    subdomain_coords = None
+    # Validate subdomains if provided
     if subdomains:
-        for idx,subdomain in enumerate(subdomains):
+        for idx, subdomain in enumerate(subdomains):
             if not subdomain.is_valid:
                 reason = is_valid_reason(subdomain)
                 raise ValueError(
@@ -106,19 +100,11 @@ def triangulate_polygon(
                     "Each subdomain polygon must be strictly contained within the main polygon interior "
                     "(not outside, and not touching the exterior boundary or any hole boundary)."
                 )
-         
-        subdomain_coords = [
-            {
-                'exterior': list(sub.exterior.coords)[:-1],
-                'holes': [list(hole.coords)[:-1] for hole in sub.interiors]
-            }
-            for sub in subdomains
-        ]
 
+    # Pass Shapely objects directly to Rust - NO coordinate extraction!
     verts, faces, subdomain_ids = triangulate(
-        exterior,
-        holes if holes else None,
-        subdomain_coords,
+        polygon,
+        subdomains,
         max_area,
         min_angle,
         return_subdomain_ids,
