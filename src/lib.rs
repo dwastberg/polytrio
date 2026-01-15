@@ -7,9 +7,18 @@ use spade::{
     AngleLimit, ConstrainedDelaunayTriangulation, Point2, RefinementParameters, Triangulation,
 };
 
-/// Point-in-polygon test using ray casting algorithm.
+/// Input structure for subdomains with exterior and holes.
+#[derive(FromPyObject)]
+struct SubdomainInput {
+    #[pyo3(item)]
+    exterior: Vec<(f64, f64)>,
+    #[pyo3(item)]
+    holes: Vec<Vec<(f64, f64)>>,
+}
+
+/// Point-in-polygon test using ray casting algorithm (for simple polygons without holes).
 /// Only used when subdomains are present (spade's face classification can't handle them).
-fn is_point_in_polygon(point: Point2<f64>, polygon: &[Point2<f64>]) -> bool {
+fn is_point_in_polygon_simple(point: Point2<f64>, polygon: &[Point2<f64>]) -> bool {
     let mut inside = false;
     let n = polygon.len();
     let x = point.x;
@@ -27,6 +36,28 @@ fn is_point_in_polygon(point: Point2<f64>, polygon: &[Point2<f64>]) -> bool {
         }
     }
     inside
+}
+
+/// Point-in-polygon test that handles polygons with holes.
+/// Returns true if the point is inside the exterior and NOT inside any hole.
+fn is_point_in_polygon_with_holes(
+    point: Point2<f64>,
+    exterior: &[Point2<f64>],
+    holes: &[Vec<Point2<f64>>],
+) -> bool {
+    // Must be inside exterior
+    if !is_point_in_polygon_simple(point, exterior) {
+        return false;
+    }
+
+    // Must NOT be inside any hole
+    for hole in holes {
+        if is_point_in_polygon_simple(point, hole) {
+            return false;
+        }
+    }
+
+    true
 }
 
 /// Bounding box for spatial indexing of subdomains.
@@ -169,7 +200,7 @@ fn triangulate<'py>(
     py: Python<'py>,
     vertices: Vec<(f64, f64)>,
     holes: Option<Vec<Vec<(f64, f64)>>>,
-    subdomains: Option<Vec<Vec<(f64, f64)>>>,
+    subdomains: Option<Vec<SubdomainInput>>,
     max_area: Option<f64>,
     min_angle: Option<f64>,
     return_subdomain_ids: Option<bool>,
@@ -205,28 +236,53 @@ fn triangulate<'py>(
         }
     }
 
-    // Add constraint edges for each subdomain
+    // Internal structure for subdomain polygons with holes
+    struct SubdomainPolygon {
+        exterior: Vec<Point2<f64>>,
+        holes: Vec<Vec<Point2<f64>>>,
+    }
+
+    // Add constraint edges for each subdomain (exterior and holes)
     if let Some(ref subdomain_list) = subdomains {
-        for subdomain_vertices in subdomain_list {
-            let subdomain_points: Vec<Point2<f64>> = subdomain_vertices
+        for sub_input in subdomain_list {
+            // Add exterior
+            let exterior_points: Vec<Point2<f64>> = sub_input.exterior
                 .iter()
                 .map(|(x, y)| Point2::new(*x, *y))
                 .collect();
-
-            cdt.add_constraint_edges(subdomain_points, true)
+            cdt.add_constraint_edges(exterior_points, true)
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{:?}", e)))?;
+
+            // Add each hole
+            for hole_coords in &sub_input.holes {
+                let hole_points: Vec<Point2<f64>> = hole_coords
+                    .iter()
+                    .map(|(x, y)| Point2::new(*x, *y))
+                    .collect();
+                cdt.add_constraint_edges(hole_points, true)
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{:?}", e)))?;
+            }
         }
     }
 
     // Store subdomain polygons for optional subdomain ID assignment
-    let subdomain_polygons: Vec<Vec<Point2<f64>>> = if let Some(ref subdomain_list) = subdomains {
+    let subdomain_polygons: Vec<SubdomainPolygon> = if let Some(ref subdomain_list) = subdomains {
         subdomain_list
             .iter()
-            .map(|subdomain_vertices| {
-                subdomain_vertices
+            .map(|sub_input| SubdomainPolygon {
+                exterior: sub_input.exterior
                     .iter()
                     .map(|(x, y)| Point2::new(*x, *y))
-                    .collect()
+                    .collect(),
+                holes: sub_input.holes
+                    .iter()
+                    .map(|hole_coords| {
+                        hole_coords
+                            .iter()
+                            .map(|(x, y)| Point2::new(*x, *y))
+                            .collect()
+                    })
+                    .collect(),
             })
             .collect()
     } else {
@@ -238,7 +294,7 @@ fn triangulate<'py>(
     // For smaller counts, simple bounding box filtering is faster
     let subdomain_bboxes: Vec<BoundingBox> = subdomain_polygons
         .iter()
-        .map(|poly| BoundingBox::from_polygon(poly))
+        .map(|sub| BoundingBox::from_polygon(&sub.exterior))
         .collect();
 
     let use_spatial_grid = subdomain_polygons.len() > 100;
@@ -329,14 +385,14 @@ fn triangulate<'py>(
             let center = face.center();
 
             // Check 1: Must be inside exterior
-            if !is_point_in_polygon(center, &exterior_points) {
+            if !is_point_in_polygon_simple(center, &exterior_points) {
                 continue;
             }
 
             // Check 2: Must NOT be inside any hole
             let mut in_hole = false;
             for hole in &hole_polygons {
-                if is_point_in_polygon(center, hole) {
+                if is_point_in_polygon_simple(center, hole) {
                     in_hole = true;
                     break;
                 }
@@ -383,7 +439,11 @@ fn triangulate<'py>(
 
             // Test only the candidate subdomains (typically 1-3 instead of thousands)
             for &idx in &candidates {
-                if is_point_in_polygon(centroid, &subdomain_polygons[idx]) {
+                if is_point_in_polygon_with_holes(
+                    centroid,
+                    &subdomain_polygons[idx].exterior,
+                    &subdomain_polygons[idx].holes,
+                ) {
                     subdomain_id = idx as i32;
                     break;  // Assume non-overlapping subdomains
                 }

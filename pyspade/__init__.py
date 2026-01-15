@@ -107,7 +107,13 @@ def triangulate_polygon(
                     "(not outside, and not touching the exterior boundary or any hole boundary)."
                 )
          
-        subdomain_coords = [list(sub.exterior.coords)[:-1] for sub in subdomains]
+        subdomain_coords = [
+            {
+                'exterior': list(sub.exterior.coords)[:-1],
+                'holes': [list(hole.coords)[:-1] for hole in sub.interiors]
+            }
+            for sub in subdomains
+        ]
 
     verts, faces, subdomain_ids = triangulate(
         exterior,

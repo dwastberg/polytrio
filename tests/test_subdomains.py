@@ -160,6 +160,41 @@ def test_subdomain_ids_with_no_subdomains():
     assert len(result) == 2
 
 
+def test_subdomain_with_hole_excludes_hole_region():
+    """Triangles inside subdomain holes should have subdomain_id=-1."""
+    exterior = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+
+    # Subdomain with a hole
+    sub1_ext = [(2, 2), (8, 2), (8, 8), (2, 8)]
+    sub1_hole = [(4, 4), (6, 4), (6, 6), (4, 6)]
+    sub1 = Polygon(sub1_ext, holes=[sub1_hole])
+
+    verts, faces, subdomain_ids = triangulate_polygon(
+        exterior,
+        subdomains=[sub1],
+        return_subdomain_ids=True,
+        max_area=0.5,
+    )
+
+    hole_poly = Polygon(sub1_hole)
+
+    # Check each face
+    for i, face in enumerate(faces):
+        pts = verts[face]
+        centroid = pts.mean(axis=0)
+        point = Point(centroid[0], centroid[1])
+
+        # Faces inside the hole must NOT be marked as subdomain 0
+        if hole_poly.contains(point):
+            assert subdomain_ids[i] == -1, \
+                f"Face {i} inside hole has subdomain_id={subdomain_ids[i]}, expected -1"
+
+        # Faces inside subdomain (excluding hole) should be subdomain 0
+        if sub1.contains(point):
+            assert subdomain_ids[i] == 0, \
+                f"Face {i} inside subdomain has subdomain_id={subdomain_ids[i]}, expected 0"
+
+
 if __name__ == "__main__":
     test_subdomain_edges_preserved()
     print("Test passed!")

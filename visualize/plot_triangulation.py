@@ -13,6 +13,7 @@ def plot_polygon_and_mesh(
     subdomains: list[Polygon] | None = None,
     max_area: float | None = None,
     min_angle: float | None = None,
+    color_by_subdomain: bool = False,
 ) -> None:
     """Plot the input polygon and its triangulation side by side.
 
@@ -26,11 +27,24 @@ def plot_polygon_and_mesh(
         Maximum triangle area for mesh refinement.
     min_angle : float, optional
         Minimum angle in degrees for mesh refinement.
+    color_by_subdomain : bool, optional
+        If True and subdomains are provided, color triangles by subdomain ID.
     """
     # Triangulate the polygon
-    vertices, faces = triangulate_polygon(
-        polygon, subdomains=subdomains, max_area=max_area, min_angle=min_angle
-    )
+    if color_by_subdomain and subdomains:
+        vertices, faces, subdomain_ids = triangulate_polygon(
+            polygon,
+            subdomains=subdomains,
+            max_area=max_area,
+            min_angle=min_angle,
+            return_subdomain_ids=True
+        )
+    else:
+        result = triangulate_polygon(
+            polygon, subdomains=subdomains, max_area=max_area, min_angle=min_angle
+        )
+        vertices, faces = result
+        subdomain_ids = None
 
     # Create figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
@@ -52,13 +66,57 @@ def plot_polygon_and_mesh(
 
     # Plot triangulation on the right
     triangles = vertices[faces]
-    collection = PolyCollection(
-        triangles,
-        facecolors="lightblue",
-        edgecolors="darkblue",
-        linewidths=0.5,
-        alpha=0.7,
-    )
+
+    # Color by subdomain if requested
+    if subdomain_ids is not None:
+        # Create a colormap for subdomains
+        import matplotlib as mpl
+
+        unique_ids = np.unique(subdomain_ids)
+        n_subdomains = len([sid for sid in unique_ids if sid >= 0])
+
+        # Generate distinct colors for each subdomain
+        cmap = mpl.colormaps.get_cmap('tab10' if n_subdomains <= 10 else 'tab20')
+        colors = []
+
+        for sub_id in subdomain_ids:
+            if sub_id == -1:
+                # Not in any subdomain - use light gray
+                colors.append('lightgray')
+            else:
+                # Use colormap for subdomain
+                colors.append(cmap(sub_id / max(1, n_subdomains - 1)))
+
+        collection = PolyCollection(
+            triangles,
+            facecolors=colors,
+            edgecolors="darkblue",
+            linewidths=0.5,
+            alpha=0.7,
+        )
+
+        # Add legend for subdomains
+        from matplotlib.patches import Patch
+        legend_elements = []
+        for i in range(n_subdomains):
+            legend_elements.append(
+                Patch(facecolor=cmap(i / max(1, n_subdomains - 1)),
+                      edgecolor='darkblue',
+                      label=f'Subdomain {i}')
+            )
+        legend_elements.append(
+            Patch(facecolor='lightgray', edgecolor='darkblue', label='No subdomain')
+        )
+        ax2.legend(handles=legend_elements, loc='upper right')
+    else:
+        collection = PolyCollection(
+            triangles,
+            facecolors="lightblue",
+            edgecolors="darkblue",
+            linewidths=0.5,
+            alpha=0.7,
+        )
+
     ax2.add_collection(collection)
 
     # Plot vertices
@@ -120,28 +178,27 @@ def main() -> None:
     # poly_with_holes = Polygon(exterior, holes=[hole1, hole2])
     # plot_polygon_and_mesh(poly_with_holes, max_area=0.5, min_angle=20.0)
 
-    # Example 7: Polygon with subdomains
-    print("Example 7: Square with internal subdomain")
+    # Example 7: Polygon with subdomains (colored by subdomain)
+    print("Example 7: Square with internal subdomain (colored by subdomain)")
     exterior = [(0, 0), (10, 0), (10, 10), (0, 10)]
     subdomain = Polygon([(2, 2), (8, 2), (8, 8), (2, 8)])
     poly = Polygon(exterior)
-    plot_polygon_and_mesh(poly, subdomains=[subdomain], max_area=1.0)
+    plot_polygon_and_mesh(poly, subdomains=[subdomain], max_area=1.0, color_by_subdomain=True)
 
-    # Example 8: Complex polygon with multiple subdomains and a hole
-    print("Example 8: Complex polygon with multiple subdomains and a hole")
+    # Example 8: Complex polygon with multiple subdomains and a hole (colored by subdomain)
+    print("Example 8: Complex polygon with multiple subdomains and a hole (colored by subdomain)")
     exterior = [(0, 0), (20, 0), (20, 20), (0, 20)]
     hole = [(15, 15), (18, 15), (18, 18), (15, 18)]
-    
+
     # sub1 has a hole where sub3 will be
     sub1_ext = [(2, 2), (8, 2), (8, 8), (2, 8)]
     sub1_hole = [(4, 4), (6, 4), (6, 6), (4, 6)]
     sub1 = Polygon(sub1_ext, holes=[sub1_hole])
-    
+
     sub2 = Polygon([(10, 2), (18, 2), (18, 8), (10, 8)])
-    sub3 = Polygon([(4, 4), (6, 4), (6, 6), (4, 6)]) # Inside hole of sub1
-    
+
     poly = Polygon(exterior, holes=[hole])
-    plot_polygon_and_mesh(poly, subdomains=[sub1, sub2, sub3], max_area=1.0)
+    plot_polygon_and_mesh(poly, subdomains=[sub1, sub2], max_area=1.0, color_by_subdomain=True)
 
 
 if __name__ == "__main__":
