@@ -12,8 +12,8 @@ use spade::{
 mod geo_utils;
 use geo_utils::{linestring_to_spade_points, polygon_to_spade_points};
 
-mod shapely_utils;
-use shapely_utils::{extract_polygon, extract_polygons};
+mod wkb_utils;
+use wkb_utils::extract_polygon;
 
 /// Entry for RTree containing subdomain index and its polygon
 struct SubdomainEntry {
@@ -50,14 +50,14 @@ impl rstar::PointDistance for SubdomainEntry {
     }
 }
 
-/// Triangulate a polygon using direct Shapely object input.
+/// Triangulate a polygon using WKB (Well-Known Binary) format input.
 ///
-/// This function accepts Shapely Polygon objects directly via the __geo_interface__
-/// protocol, eliminating coordinate extraction overhead.
+/// This function accepts polygon geometries encoded in WKB format,
+/// eliminating Python object parsing overhead.
 ///
 /// # Arguments
-/// * `polygon` - Shapely Polygon object (or any object with __geo_interface__)
-/// * `subdomains` - Optional list of Shapely Polygon objects for subdomains
+/// * `polygon` - Polygon geometry as WKB bytes (from Shapely's to_wkb())
+/// * `subdomains` - Optional list of subdomain polygons as WKB bytes
 /// * `max_area` - Optional maximum triangle area for mesh refinement
 /// * `min_angle` - Optional minimum angle in degrees for mesh refinement
 /// * `return_subdomain_ids` - Whether to return subdomain ID array
@@ -71,8 +71,8 @@ impl rstar::PointDistance for SubdomainEntry {
 #[pyo3(signature = (polygon, subdomains=None, max_area=None, min_angle=None, return_subdomain_ids=None))]
 fn triangulate<'py>(
     py: Python<'py>,
-    polygon: &Bound<'py, PyAny>,
-    subdomains: Option<Vec<Bound<'py, PyAny>>>,
+    polygon: &[u8],
+    subdomains: Option<Vec<Vec<u8>>>,
     max_area: Option<f64>,
     min_angle: Option<f64>,
     return_subdomain_ids: Option<bool>,
@@ -81,11 +81,18 @@ fn triangulate<'py>(
     Bound<'py, PyArray2<u32>>,
     Option<Bound<'py, PyArray1<i32>>>,
 )> {
-    // Extract geo::Polygon directly from Shapely via __geo_interface__
+    // Extract geo::Polygon from WKB bytes
     let exterior_polygon = extract_polygon(polygon)?;
 
-    // Extract subdomain polygons
-    let subdomain_polygons = extract_polygons(subdomains)?;
+    // Extract subdomain polygons from WKB bytes
+    let subdomain_polygons = match subdomains {
+        Some(wkb_list) => {
+            wkb_list.iter()
+                .map(|wkb| extract_polygon(wkb.as_slice()))
+                .collect::<PyResult<Vec<_>>>()?
+        }
+        None => Vec::new(),
+    };
 
     // Create constrained Delaunay triangulation
     let mut cdt = ConstrainedDelaunayTriangulation::<Point2<f64>>::new();

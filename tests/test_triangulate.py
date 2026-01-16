@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from shapely import Polygon
+from shapely import Polygon, to_wkb
 
 from pyspade import triangulate, triangulate_polygon
 
@@ -108,18 +108,20 @@ class TestTriangulateDirect:
     """Tests for the low-level triangulate function."""
 
     def test_direct_coordinates(self):
-        """Test triangulate with Shapely polygon."""
+        """Test triangulate with WKB bytes."""
         polygon = Polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
-        verts, faces, subdomain_ids = triangulate(polygon, None, None, None, False)
+        polygon_wkb = to_wkb(polygon)
+        verts, faces, subdomain_ids = triangulate(polygon_wkb, None, None, None, False)
 
         assert verts.shape == (4, 2)
         assert faces.shape == (2, 3)
         assert subdomain_ids is None  # No subdomains, no IDs requested
 
     def test_direct_with_refinement(self):
-        """Test triangulate with refinement parameters."""
+        """Test triangulate with refinement parameters and WKB bytes."""
         polygon = Polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
-        verts, faces, subdomain_ids = triangulate(polygon, None, 0.1, None, False)
+        polygon_wkb = to_wkb(polygon)
+        verts, faces, subdomain_ids = triangulate(polygon_wkb, None, 0.1, None, False)
 
         assert faces.shape[0] > 2
         assert subdomain_ids is None  # No subdomains, no IDs requested
@@ -240,3 +242,68 @@ class TestPolygonsWithHoles:
 
         with pytest.raises(ValueError, match="Invalid polygon"):
             triangulate_polygon(poly)
+
+
+class TestWKBIntegration:
+    """Tests for WKB-based polygon passing."""
+
+    def test_wkb_coordinate_preservation(self):
+        """Verify coordinates preserved exactly through WKB."""
+        coords = [(0.123456789, 0.987654321), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+        poly = Polygon(coords)
+        verts, faces = triangulate_polygon(poly)
+
+        # Check first coordinate preserved to machine precision
+        assert any(
+            np.allclose(verts[i], [0.123456789, 0.987654321], atol=1e-9)
+            for i in range(len(verts))
+        )
+
+    def test_polygon_with_holes_wkb(self):
+        """Holes should work correctly through WKB."""
+        exterior = [(0, 0), (10, 0), (10, 10), (0, 10)]
+        hole = [(2, 2), (8, 2), (8, 8), (2, 8)]
+        poly = Polygon(exterior, [hole])
+        verts, faces = triangulate_polygon(poly)
+
+        # Should produce triangulation excluding hole interior
+        assert faces.shape[0] > 0
+
+        # Verify no faces are inside the hole
+        from shapely.geometry import Point
+        hole_poly = Polygon(hole)
+        for face in faces:
+            centroid = verts[face].mean(axis=0)
+            centroid_point = Point(centroid[0], centroid[1])
+            assert not hole_poly.contains(centroid_point)
+
+    def test_subdomains_through_wkb(self):
+        """Subdomains should work correctly through WKB."""
+        exterior = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+        sub1 = Polygon([(1, 1), (4, 1), (4, 4), (1, 4)])
+        sub2 = Polygon([(6, 6), (9, 6), (9, 9), (6, 9)])
+
+        verts, faces, ids = triangulate_polygon(
+            exterior,
+            subdomains=[sub1, sub2],
+            return_subdomain_ids=True
+        )
+
+        # Should have three categories: -1, 0, 1
+        unique_ids = set(ids)
+        assert unique_ids == {-1, 0, 1}
+
+    def test_complex_polygon_through_wkb(self):
+        """Complex polygon with many vertices should work through WKB."""
+        # Create polygon with 100 vertices
+        angles = np.linspace(0, 2 * np.pi, 100)
+        coords = [(np.cos(a), np.sin(a)) for a in angles]
+        poly = Polygon(coords)
+
+        verts, faces = triangulate_polygon(poly)
+
+        # Should produce valid triangulation
+        assert verts.shape[0] >= 100
+        assert faces.shape[0] > 0
+        assert verts.dtype == np.float64
+        assert faces.dtype == np.uint32

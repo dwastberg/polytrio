@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from shapely import is_valid_reason
+from shapely import is_valid_reason, to_wkb
 from shapely.strtree import STRtree
 
 
@@ -101,10 +101,13 @@ def triangulate_polygon(
                     "(not outside, and not touching the exterior boundary or any hole boundary)."
                 )
 
-    # Pass Shapely objects directly to Rust - NO coordinate extraction!
+    # Convert Shapely polygons to WKB bytes
+    polygon_wkb = to_wkb(polygon)
+    subdomains_wkb = [to_wkb(sub) for sub in subdomains] if subdomains else None
+
     verts, faces, subdomain_ids = triangulate(
-        polygon,
-        subdomains,
+        polygon_wkb,
+        subdomains_wkb,
         max_area,
         min_angle,
         return_subdomain_ids,
