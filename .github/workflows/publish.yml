@@ -44,6 +44,7 @@ jobs:
           maturin build --release
 
       - name: Install package
+        shell: bash
         run: |
           uv pip install --system target/wheels/*.whl --force-reinstall --no-deps
 
