@@ -3,7 +3,7 @@ name: Build and Publish
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
   release:
     types: [published]
@@ -51,7 +51,7 @@ jobs:
 
       - name: Install package
         run: |
-          uv pip install --system polytrio --find-links target/wheels --force-reinstall --no-index
+          uv pip install --system polytrio --find-links target/wheels --force-reinstall --no-deps
 
       - name: Install test dependencies
         run: |
@@ -149,7 +149,7 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi') ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     environment:
       name: testpypi
       url: https://test.pypi.org/p/polytrio
