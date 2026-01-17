@@ -259,9 +259,9 @@ fn triangulate<'py>(
     ))
 }
 
-/// PySpade: Python bindings for the Spade 2D meshing library
+/// Polytrio: Python bindings for the Spade 2D meshing library
 #[pymodule]
-fn _pyspade(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _polytrio(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(triangulate, m)?)?;
     Ok(())
 }

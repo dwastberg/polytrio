@@ -9,7 +9,7 @@ from shapely import is_valid_reason, to_wkb
 from shapely.strtree import STRtree
 
 
-from pyspade._pyspade import triangulate
+from polytrio._polytrio import triangulate
 
 from typing import TYPE_CHECKING, Optional, List, Union
 

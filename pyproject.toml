@@ -3,14 +3,14 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "pyspade"
+name = "polytrio"
 version = "0.1.0a1"
 description = "Fast Delaunay triangulation for polygons with holes and subdomains using Rust spade library"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "PySpade Contributors"}
+    {name = "Polytrio Contributors"}
 ]
 keywords = [
     "triangulation",
@@ -45,7 +45,7 @@ dependencies = [
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-module-name = "pyspade._pyspade"
+module-name = "polytrio._polytrio"
 
 [dependency-groups]
 dev = [

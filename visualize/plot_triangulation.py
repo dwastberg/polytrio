@@ -5,7 +5,7 @@ import numpy as np
 from matplotlib.collections import PolyCollection
 from shapely import Polygon
 
-from pyspade import triangulate_polygon
+from polytrio import triangulate_polygon
 
 
 def plot_polygon_and_mesh(

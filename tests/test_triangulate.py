@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from shapely import Polygon, to_wkb
 
-from pyspade import triangulate, triangulate_polygon
+from polytrio import triangulate, triangulate_polygon
 
 
 class TestTriangulatePolygon:

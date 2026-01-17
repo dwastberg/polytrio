@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from shapely.geometry import Polygon, Point
-from pyspade import triangulate_polygon
+from polytrio import triangulate_polygon
 
 def test_subdomain_edges_preserved():
     exterior = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])

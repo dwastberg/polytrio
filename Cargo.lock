@@ -1824,6 +1824,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "polytrio"
+version = "0.1.0"
+dependencies = [
+ "geo",
+ "maturin",
+ "ndarray",
+ "numpy",
+ "pyo3",
+ "rstar",
+ "spade",
+ "wkb",
+]
+
+[[package]]
 name = "portable-atomic"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1955,20 +1969,6 @@ dependencies = [
  "serde",
  "thiserror 2.0.17",
  "toml 0.9.11+spec-1.1.0",
-]
-
-[[package]]
-name = "pyspade"
-version = "0.1.0"
-dependencies = [
- "geo",
- "maturin",
- "ndarray",
- "numpy",
- "pyo3",
- "rstar",
- "spade",
- "wkb",
 ]
 
 [[package]]

@@ -51,7 +51,7 @@ jobs:
 
       - name: Install package
         run: |
-          uv pip install --system pyspade --find-links target/wheels --force-reinstall --no-index
+          uv pip install --system polytrio --find-links target/wheels --force-reinstall --no-index
 
       - name: Install test dependencies
         run: |
@@ -152,7 +152,7 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/master')
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/pyspade
+      url: https://test.pypi.org/p/polytrio
     permissions:
       id-token: write
 
@@ -182,7 +182,7 @@ jobs:
       (github.event_name == 'release' && github.event.action == 'published')
     environment:
       name: pypi
-      url: https://pypi.org/p/pyspade
+      url: https://pypi.org/p/polytrio
     permissions:
       id-token: write
 

@@ -1,11 +1,11 @@
-# PySpade
+# Polytrio
 
 Fast Delaunay triangulation for polygons with holes and subdomains, powered by Rust. PySpade provides Python bindings to the Rust `spade` library for high-performance constrained Delaunay triangulation (CDT) with support for mesh refinement.
 
 ## Installation
 
 ```bash
-pip install pyspade
+pip install polytrio
 ```
 
 Requires Python ≥3.10, numpy, and shapely.
@@ -16,7 +16,7 @@ Requires Python ≥3.10, numpy, and shapely.
 
 ```python
 from shapely.geometry import Polygon
-from pyspade import triangulate_polygon
+from polytrio import triangulate_polygon
 
 # Create a simple polygon
 polygon = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])

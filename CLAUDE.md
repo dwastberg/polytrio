@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-PySpade is a Python library that provides bindings to the Rust `spade` library for 2D Delaunay triangulation and mesh generation. It's a hybrid Rust-Python project using:
+Polytrio is a Python library that provides bindings to the Rust `spade` library for 2D Delaunay triangulation and mesh generation. It's a hybrid Rust-Python project using:
 - **PyO3** for Rust-Python bindings
 - **Maturin** for building Python wheels
 - **rust-numpy** for efficient numpy array interchange
