@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__version__ = "0.1.0a1"
+
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -164,4 +166,4 @@ def mesh_to_multipolygon(
     return MultiPolygon(polygons)
 
 
-__all__ = ["triangulate", "triangulate_polygon"]
+__all__ = ["triangulate", "triangulate_polygon", "mesh_to_multipolygon", "__version__"]

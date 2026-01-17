@@ -4,10 +4,40 @@ build-backend = "maturin"
 
 [project]
 name = "pyspade"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.1.0a1"
+description = "Fast Delaunay triangulation for polygons with holes and subdomains using Rust spade library"
 readme = "README.md"
 requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "PySpade Contributors"}
+]
+keywords = [
+    "triangulation",
+    "delaunay",
+    "mesh",
+    "geometry",
+    "computational-geometry",
+    "spade",
+    "cdt",
+    "constrained-delaunay",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "numpy>=2.0.1",
     "shapely>=2.1.0",
