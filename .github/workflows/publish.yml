@@ -21,7 +21,7 @@
       name: Test on ${{ matrix.os }} - Python ${{ matrix.python-version }}
       runs-on: ${{ matrix.os }}
       strategy:
-        fail-fast: true
+        fail-fast: false
         matrix:
           os: [ubuntu-latest, windows-latest, macos-latest]
           python-version: ["3.10", "3.11", "3.12", "3.13"]
@@ -52,7 +52,7 @@
       needs: test
       runs-on: ${{ matrix.platform.os }}
       strategy:
-        fail-fast: true
+        fail-fast: false
         matrix:
           platform:
             - os: ubuntu-latest
