@@ -58,12 +58,10 @@
             - os: ubuntu-latest
               target: x86_64
               manylinux: manylinux_2_28
-              container: manylinux_2_28
 
             - os: ubuntu-latest
               target: aarch64
               manylinux: manylinux_2_28
-              container: manylinux_2_28
 
             - os: macos-13
               target: x86_64
@@ -93,7 +91,6 @@
             target: ${{ matrix.platform.target }}
             args: --release --out dist --find-interpreter
             manylinux: ${{ matrix.platform.manylinux }}
-            container: ${{ matrix.platform.container }}
             sccache: 'true'
 
         - name: Upload wheels
